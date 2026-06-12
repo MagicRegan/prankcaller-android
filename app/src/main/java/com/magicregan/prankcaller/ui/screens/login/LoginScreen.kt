@@ -56,7 +56,7 @@ fun LoginScreen(
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
-    var isRegistering by remember { mutableStateOf(false) }
+    var isRegistering by remember { mutableStateOf(true) }
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         focusedTextColor = TextPrimary,
@@ -109,7 +109,8 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Sign in with your PrankCaller.io account to make real prank calls",
+                text = if (isRegistering) "Create a free account to start making prank calls"
+                else "Sign in to your Prank Caller account",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
                 textAlign = TextAlign.Center
@@ -212,7 +213,7 @@ fun LoginScreen(
             Spacer(modifier = Modifier.height(24.dp))
 
             Text(
-                text = "Use your prankcaller.io account credentials.\nCredits purchased on prankcaller.io work here too.",
+                text = "Your account includes free credits to get started.\nMake prank calls to any number worldwide.",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary.copy(alpha = 0.6f),
                 textAlign = TextAlign.Center

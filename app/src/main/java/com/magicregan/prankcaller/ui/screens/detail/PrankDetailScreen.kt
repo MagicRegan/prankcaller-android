@@ -199,7 +199,7 @@ fun PrankDetailScreen(
             },
             text = {
                 Text(
-                    "You need to log in with your PrankCaller.io account to make real calls.",
+                    "Create a free account or log in to make real prank calls.",
                     color = TextSecondary
                 )
             },
@@ -481,7 +481,7 @@ fun PrankDetailScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "Calls are made using a private number via PrankCaller.io",
+                text = "Calls are made using a private number",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
