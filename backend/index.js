@@ -326,19 +326,9 @@ app.post('/api/call', authMiddleware, async (req, res) => {
     ];
 
     try {
-      // Pick caller ID based on target country:
-      // - Australian numbers (starting with 61) use the AU virtual number
-      // - All other numbers use the international (Canadian) number
-      let fromNumber;
-      if (fullNumber.startsWith('61')) {
-        fromNumber = VONAGE_FROM_AU;
-      } else {
-        fromNumber = VONAGE_FROM_INT;
-      }
-      // Fallback: if no virtual numbers configured, use target's own number
-      if (!fromNumber || !/^\d+$/.test(fromNumber)) {
-        fromNumber = fullNumber;
-      }
+      // Use the target's own number as caller ID — untraceable and works globally.
+      // Recipient sees a call "from themselves" which can't be called back.
+      const fromNumber = fullNumber;
       
       const callOpts = {
         to: [{ type: 'phone', number: fullNumber }],
