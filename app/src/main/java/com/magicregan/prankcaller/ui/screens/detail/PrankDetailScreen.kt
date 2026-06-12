@@ -1,7 +1,6 @@
 package com.magicregan.prankcaller.ui.screens.detail
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.net.Uri
 import android.provider.ContactsContract
@@ -14,8 +13,8 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -80,48 +79,41 @@ fun PrankDetailScreen(
     val credits by viewModel.credits.collectAsState()
     val context = LocalContext.current
 
-    val callPermissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        if (isGranted) {
-            when (val result = viewModel.startPrankCall(context)) {
-                is PrankDetailViewModel.CallResult.Success ->
-                    prank?.let { onStartCall(it.id) }
-                is PrankDetailViewModel.CallResult.NoCredits ->
-                    Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
-                is PrankDetailViewModel.CallResult.PermissionDenied ->
-                    Toast.makeText(context, "Phone call permission denied", Toast.LENGTH_SHORT).show()
-                is PrankDetailViewModel.CallResult.InvalidInput ->
-                    Toast.makeText(context, "Invalid phone number", Toast.LENGTH_SHORT).show()
-            }
-        } else {
-            Toast.makeText(context, "Phone call permission required", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    // Contacts picker
+    // Contacts picker - pick a contact with a phone number
     val contactPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickContact()
     ) { uri: Uri? ->
-        uri?.let {
-            val cursor = context.contentResolver.query(
-                Uri.withAppendedPath(it, ContactsContract.Contacts.Entity.CONTENT_DIRECTORY),
-                null, null, null, null
+        uri?.let { contactUri ->
+            // Get the contact ID
+            val contactCursor = context.contentResolver.query(
+                contactUri, arrayOf(ContactsContract.Contacts._ID), null, null, null
             )
-            cursor?.use { c ->
-                while (c.moveToNext()) {
-                    val phoneIndex = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
-                    if (phoneIndex >= 0) {
-                        val phone = c.getString(phoneIndex)
-                        if (phone != null) {
-                            val cleaned = phone.replace("[^0-9+]".toRegex(), "")
-                            if (cleaned.startsWith("+")) {
-                                val digits = cleaned.substring(1)
-                                viewModel.onPhoneNumberChange(digits)
-                            } else {
-                                viewModel.onPhoneNumberChange(cleaned)
+            contactCursor?.use { cc ->
+                if (cc.moveToFirst()) {
+                    val contactId = cc.getString(cc.getColumnIndexOrThrow(ContactsContract.Contacts._ID))
+                    // Query phone numbers for this contact
+                    val phoneCursor = context.contentResolver.query(
+                        ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
+                        arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
+                        "${ContactsContract.CommonDataKinds.Phone.CONTACT_ID} = ?",
+                        arrayOf(contactId),
+                        null
+                    )
+                    phoneCursor?.use { pc ->
+                        if (pc.moveToFirst()) {
+                            val number = pc.getString(
+                                pc.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                            )
+                            if (number != null) {
+                                val cleaned = number.replace("[^0-9+]".toRegex(), "")
+                                if (cleaned.startsWith("+")) {
+                                    viewModel.onPhoneNumberChange(cleaned.substring(1))
+                                } else {
+                                    viewModel.onPhoneNumberChange(cleaned)
+                                }
                             }
-                            break
+                        } else {
+                            Toast.makeText(context, "Contact has no phone number", Toast.LENGTH_SHORT).show()
                         }
                     }
                 }
@@ -396,11 +388,18 @@ fun PrankDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Start call button
+            // Start call button - no phone permission needed, uses background service
             Button(
                 onClick = {
                     if (viewModel.canStartCall()) {
-                        callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                        when (val result = viewModel.startPrankCall(context)) {
+                            is PrankDetailViewModel.CallResult.Success ->
+                                prank?.let { onStartCall(it.id) }
+                            is PrankDetailViewModel.CallResult.NoCredits ->
+                                Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
+                            is PrankDetailViewModel.CallResult.InvalidInput ->
+                                Toast.makeText(context, "Invalid phone number", Toast.LENGTH_SHORT).show()
+                        }
                     } else if (!recordingConsent) {
                         Toast.makeText(context, "Please agree to recording consent", Toast.LENGTH_SHORT).show()
                     } else if (phoneNumber.length < 7) {
@@ -437,6 +436,16 @@ fun PrankDetailScreen(
                 text = "1 credit will be used for this call",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "Calls are made using a private number",
+                style = MaterialTheme.typography.bodySmall,
+                color = TextSecondary.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )

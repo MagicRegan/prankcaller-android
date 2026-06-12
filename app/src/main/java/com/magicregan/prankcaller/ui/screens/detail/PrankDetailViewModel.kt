@@ -1,15 +1,13 @@
 package com.magicregan.prankcaller.ui.screens.detail
 
 import android.content.Context
-import android.content.Intent
-import android.media.AudioManager
-import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import com.magicregan.prankcaller.data.model.CallRecord
 import com.magicregan.prankcaller.data.model.CallStatus
 import com.magicregan.prankcaller.data.model.Prank
 import com.magicregan.prankcaller.data.repository.PrankRepository
+import com.magicregan.prankcaller.service.PrankCallService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,7 +61,6 @@ class PrankDetailViewModel @Inject constructor(
     sealed class CallResult {
         data object Success : CallResult()
         data object NoCredits : CallResult()
-        data object PermissionDenied : CallResult()
         data object InvalidInput : CallResult()
     }
 
@@ -75,29 +72,23 @@ class PrankDetailViewModel @Inject constructor(
         if (!repository.useCredit()) return CallResult.NoCredits
 
         val fullNumber = "${_countryCode.value}$number"
-        val callIntent = Intent(Intent.ACTION_CALL).apply {
-            data = Uri.parse("tel:$fullNumber")
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
 
-        try {
-            val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-            audioManager.isSpeakerphoneOn = true
-            context.startActivity(callIntent)
+        PrankCallService.start(
+            context = context,
+            audioUrl = currentPrank.previewUrl,
+            prankName = currentPrank.name,
+            phoneNumber = fullNumber
+        )
 
-            repository.addCallRecord(
-                CallRecord(
-                    prankName = currentPrank.name,
-                    prankImage = currentPrank.largeImage,
-                    phoneNumber = fullNumber,
-                    status = CallStatus.IN_PROGRESS
-                )
+        repository.addCallRecord(
+            CallRecord(
+                prankName = currentPrank.name,
+                prankImage = currentPrank.largeImage,
+                phoneNumber = fullNumber,
+                status = CallStatus.IN_PROGRESS
             )
+        )
 
-            return CallResult.Success
-        } catch (e: SecurityException) {
-            repository.refundCredit()
-            return CallResult.PermissionDenied
-        }
+        return CallResult.Success
     }
 }
