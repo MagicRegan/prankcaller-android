@@ -75,11 +75,15 @@ fun PrankDetailScreen(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            val success = viewModel.startPrankCall(context)
-            if (success) {
-                prank?.let { onStartCall(it.id) }
-            } else {
-                Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
+            when (val result = viewModel.startPrankCall(context)) {
+                is PrankDetailViewModel.CallResult.Success ->
+                    prank?.let { onStartCall(it.id) }
+                is PrankDetailViewModel.CallResult.NoCredits ->
+                    Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
+                is PrankDetailViewModel.CallResult.PermissionDenied ->
+                    Toast.makeText(context, "Phone call permission denied", Toast.LENGTH_SHORT).show()
+                is PrankDetailViewModel.CallResult.InvalidInput ->
+                    Toast.makeText(context, "Invalid phone number", Toast.LENGTH_SHORT).show()
             }
         } else {
             Toast.makeText(context, "Phone call permission required", Toast.LENGTH_SHORT).show()

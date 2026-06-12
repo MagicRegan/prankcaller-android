@@ -33,6 +33,7 @@ class PrankCallService : Service() {
         audioManager.mode = AudioManager.MODE_IN_COMMUNICATION
         audioManager.isSpeakerphoneOn = true
 
+        exoPlayer?.release()
         exoPlayer = ExoPlayer.Builder(this).build().apply {
             setMediaItem(MediaItem.fromUri(audioUrl))
             prepare()

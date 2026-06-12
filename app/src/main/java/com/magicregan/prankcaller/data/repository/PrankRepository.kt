@@ -6,6 +6,7 @@ import com.magicregan.prankcaller.data.model.Prank
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -33,13 +34,24 @@ class PrankRepository @Inject constructor() {
     }
 
     fun useCredit(): Boolean {
-        val current = _credits.value
-        if (current <= 0) return false
-        _credits.value = current - 1
-        return true
+        var success = false
+        _credits.update { current ->
+            if (current > 0) {
+                success = true
+                current - 1
+            } else {
+                success = false
+                current
+            }
+        }
+        return success
+    }
+
+    fun refundCredit() {
+        _credits.update { it + 1 }
     }
 
     fun addCredits(amount: Int) {
-        _credits.value = _credits.value + amount
+        _credits.update { it + amount }
     }
 }

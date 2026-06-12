@@ -51,24 +51,24 @@ class PrankDetailViewModel @Inject constructor(
     }
 
     fun canStartCall(): Boolean {
-        return _phoneNumber.value.length >= 7 && repository.credits.value > 0
+        return _phoneNumber.value.length >= 7 &&
+            repository.credits.value > 0 &&
+            _recordingConsent.value
     }
 
-    fun startPrankCall(context: Context): Boolean {
-        val currentPrank = _prank.value ?: return false
+    sealed class CallResult {
+        data object Success : CallResult()
+        data object NoCredits : CallResult()
+        data object PermissionDenied : CallResult()
+        data object InvalidInput : CallResult()
+    }
+
+    fun startPrankCall(context: Context): CallResult {
+        val currentPrank = _prank.value ?: return CallResult.InvalidInput
         val number = _phoneNumber.value
-        if (number.length < 7) return false
+        if (number.length < 7) return CallResult.InvalidInput
 
-        if (!repository.useCredit()) return false
-
-        repository.addCallRecord(
-            CallRecord(
-                prankName = currentPrank.name,
-                prankImage = currentPrank.largeImage,
-                phoneNumber = "${_countryCode.value}$number",
-                status = CallStatus.IN_PROGRESS
-            )
-        )
+        if (!repository.useCredit()) return CallResult.NoCredits
 
         val fullNumber = "${_countryCode.value}$number"
         val callIntent = Intent(Intent.ACTION_CALL).apply {
@@ -80,9 +80,20 @@ class PrankDetailViewModel @Inject constructor(
             val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
             audioManager.isSpeakerphoneOn = true
             context.startActivity(callIntent)
-            return true
+
+            repository.addCallRecord(
+                CallRecord(
+                    prankName = currentPrank.name,
+                    prankImage = currentPrank.largeImage,
+                    phoneNumber = fullNumber,
+                    status = CallStatus.IN_PROGRESS
+                )
+            )
+
+            return CallResult.Success
         } catch (e: SecurityException) {
-            return false
+            repository.refundCredit()
+            return CallResult.PermissionDenied
         }
     }
 }
