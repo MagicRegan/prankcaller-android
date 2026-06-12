@@ -10,6 +10,7 @@ import com.magicregan.prankcaller.ui.screens.call.ActiveCallScreen
 import com.magicregan.prankcaller.ui.screens.calls.CallsScreen
 import com.magicregan.prankcaller.ui.screens.detail.PrankDetailScreen
 import com.magicregan.prankcaller.ui.screens.home.HomeScreen
+import com.magicregan.prankcaller.ui.screens.login.LoginScreen
 import com.magicregan.prankcaller.ui.screens.profile.ProfileScreen
 import com.magicregan.prankcaller.ui.screens.purchase.PurchaseScreen
 
@@ -18,6 +19,7 @@ sealed class Screen(val route: String) {
     data object Calls : Screen("calls")
     data object Purchase : Screen("purchase")
     data object Profile : Screen("profile")
+    data object Login : Screen("login")
     data object PrankDetail : Screen("prank_detail/{prankId}") {
         fun createRoute(prankId: Int) = "prank_detail/$prankId"
     }
@@ -56,6 +58,14 @@ fun NavGraph(
             ProfileScreen()
         }
 
+        composable(Screen.Login.route) {
+            LoginScreen(
+                onLoginSuccess = {
+                    navController.popBackStack()
+                }
+            )
+        }
+
         composable(
             route = Screen.PrankDetail.route,
             arguments = listOf(navArgument("prankId") { type = NavType.IntType })
@@ -65,6 +75,9 @@ fun NavGraph(
                 onPlayPreview = onPlayPreview,
                 onStartCall = { prankId ->
                     navController.navigate(Screen.ActiveCall.createRoute(prankId))
+                },
+                onNavigateToLogin = {
+                    navController.navigate(Screen.Login.route)
                 }
             )
         }

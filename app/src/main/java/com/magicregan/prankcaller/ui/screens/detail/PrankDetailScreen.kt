@@ -30,25 +30,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -57,6 +62,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import com.magicregan.prankcaller.data.CountryCodes
 import com.magicregan.prankcaller.ui.components.PhoneNumberInput
 import com.magicregan.prankcaller.ui.theme.CardBackground
 import com.magicregan.prankcaller.ui.theme.Crimson
@@ -70,6 +76,7 @@ fun PrankDetailScreen(
     onBackClick: () -> Unit,
     onPlayPreview: (Int) -> Unit,
     onStartCall: (Int) -> Unit,
+    onNavigateToLogin: () -> Unit,
     viewModel: PrankDetailViewModel = hiltViewModel()
 ) {
     val prank by viewModel.prank.collectAsState()
@@ -77,21 +84,20 @@ fun PrankDetailScreen(
     val countryCode by viewModel.countryCode.collectAsState()
     val recordingConsent by viewModel.recordingConsent.collectAsState()
     val credits by viewModel.credits.collectAsState()
+    val callState by viewModel.callState.collectAsState()
     val context = LocalContext.current
 
-    // Contacts picker - pick a contact with a phone number
+    // Contacts picker
     val contactPickerLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.PickContact()
     ) { uri: Uri? ->
         uri?.let { contactUri ->
-            // Get the contact ID
             val contactCursor = context.contentResolver.query(
                 contactUri, arrayOf(ContactsContract.Contacts._ID), null, null, null
             )
             contactCursor?.use { cc ->
                 if (cc.moveToFirst()) {
                     val contactId = cc.getString(cc.getColumnIndexOrThrow(ContactsContract.Contacts._ID))
-                    // Query phone numbers for this contact
                     val phoneCursor = context.contentResolver.query(
                         ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                         arrayOf(ContactsContract.CommonDataKinds.Phone.NUMBER),
@@ -107,7 +113,9 @@ fun PrankDetailScreen(
                             if (number != null) {
                                 val cleaned = number.replace("[^0-9+]".toRegex(), "")
                                 if (cleaned.startsWith("+")) {
-                                    viewModel.onPhoneNumberChange(cleaned.substring(1))
+                                    val parsed = CountryCodes.parseInternationalNumber(cleaned.substring(1))
+                                    viewModel.onCountryCodeChange(parsed.countryCode)
+                                    viewModel.onPhoneNumberChange(parsed.localNumber)
                                 } else {
                                     viewModel.onPhoneNumberChange(cleaned)
                                 }
@@ -132,6 +140,112 @@ fun PrankDetailScreen(
     }
 
     val currentPrank = prank ?: return
+
+    // Success dialog
+    if (callState is PrankDetailViewModel.CallState.Success) {
+        AlertDialog(
+            onDismissRequest = { viewModel.resetCallState() },
+            containerColor = CardBackground,
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint = Color(0xFF39E08B),
+                    modifier = Modifier.size(64.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Congratulations!",
+                    color = TextPrimary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text = {
+                Text(
+                    text = "Call scheduled successfully!",
+                    color = TextSecondary,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.resetCallState()
+                        onStartCall(currentPrank.id)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF2196F3),
+                        contentColor = TextPrimary
+                    )
+                ) {
+                    Text("OK", fontWeight = FontWeight.Bold)
+                }
+            }
+        )
+    }
+
+    // Need login dialog
+    if (callState is PrankDetailViewModel.CallState.NeedLogin) {
+        AlertDialog(
+            onDismissRequest = { viewModel.resetCallState() },
+            containerColor = CardBackground,
+            title = {
+                Text("Login Required", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    "You need to log in with your PrankCaller.io account to make real calls.",
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        viewModel.resetCallState()
+                        onNavigateToLogin()
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = Crimson)
+                ) {
+                    Text("Log In", color = TextPrimary)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.resetCallState() }) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        )
+    }
+
+    // Error dialog
+    if (callState is PrankDetailViewModel.CallState.Error) {
+        AlertDialog(
+            onDismissRequest = { viewModel.resetCallState() },
+            containerColor = CardBackground,
+            title = {
+                Text("Call Failed", color = TextPrimary, fontWeight = FontWeight.Bold)
+            },
+            text = {
+                Text(
+                    (callState as PrankDetailViewModel.CallState.Error).message,
+                    color = TextSecondary
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = { viewModel.resetCallState() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Crimson)
+                ) {
+                    Text("OK", color = TextPrimary)
+                }
+            }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -172,7 +286,7 @@ fun PrankDetailScreen(
                 Spacer(modifier = Modifier.weight(1f))
 
                 Text(
-                    text = "$credits 🎟️",
+                    text = "$credits \uD83C\uDF9F\uFE0F",
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 16.sp,
@@ -187,7 +301,7 @@ fun PrankDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Prank image with play overlay - responsive aspect ratio
+            // Prank image
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -247,46 +361,19 @@ fun PrankDetailScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.ThumbUp,
-                        contentDescription = "Likes",
-                        tint = Crimson,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Filled.ThumbUp, "Likes", tint = Crimson, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = formatCount(currentPrank.thumbsUp),
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
+                    Text(formatCount(currentPrank.thumbsUp), color = TextSecondary, fontSize = 14.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.ThumbDown,
-                        contentDescription = "Dislikes",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Filled.ThumbDown, "Dislikes", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = formatCount(currentPrank.thumbsDown),
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
+                    Text(formatCount(currentPrank.thumbsDown), color = TextSecondary, fontSize = 14.sp)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Filled.Call,
-                        contentDescription = "Calls sent",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Filled.Call, "Calls sent", tint = TextSecondary, modifier = Modifier.size(20.dp))
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = "${formatCount(currentPrank.callsSent)} sent",
-                        color = TextSecondary,
-                        fontSize = 14.sp
-                    )
+                    Text("${formatCount(currentPrank.callsSent)} sent", color = TextSecondary, fontSize = 14.sp)
                 }
                 IconButton(onClick = {
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -295,46 +382,27 @@ fun PrankDetailScreen(
                     }
                     context.startActivity(Intent.createChooser(shareIntent, "Share Prank"))
                 }) {
-                    Icon(
-                        imageVector = Icons.Filled.Share,
-                        contentDescription = "Share",
-                        tint = TextSecondary,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Icon(Icons.Filled.Share, "Share", tint = TextSecondary, modifier = Modifier.size(20.dp))
                 }
             }
 
             Spacer(modifier = Modifier.height(20.dp))
 
             // Tags
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (currentPrank.hasPrankAI) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = Crimson
-                    ) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = Crimson) {
                         Text(
-                            text = "🤖 PRANK AI",
-                            color = TextPrimary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            "\uD83E\uDD16 PRANK AI", color = TextPrimary, fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
                 if (currentPrank.isDynamic) {
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = CardBackground
-                    ) {
+                    Surface(shape = RoundedCornerShape(16.dp), color = CardBackground) {
                         Text(
-                            text = "CUSTOMIZABLE",
-                            color = TextSecondary,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                            "CUSTOMIZABLE", color = TextSecondary, fontWeight = FontWeight.Bold,
+                            fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                         )
                     }
                 }
@@ -342,14 +410,7 @@ fun PrankDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Phone number section
-            Text(
-                text = "Friend's Number",
-                style = MaterialTheme.typography.titleMedium,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold
-            )
-
+            Text("Friend's Number", style = MaterialTheme.typography.titleMedium, color = TextPrimary, fontWeight = FontWeight.Bold)
             Spacer(modifier = Modifier.height(8.dp))
 
             PhoneNumberInput(
@@ -388,62 +449,39 @@ fun PrankDetailScreen(
 
             Spacer(modifier = Modifier.height(24.dp))
 
-            // Start call button - no phone permission needed, uses background service
+            // Start call button
             Button(
                 onClick = {
                     if (viewModel.canStartCall()) {
-                        when (val result = viewModel.startPrankCall(context)) {
-                            is PrankDetailViewModel.CallResult.Success ->
-                                prank?.let { onStartCall(it.id) }
-                            is PrankDetailViewModel.CallResult.NoCredits ->
-                                Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
-                            is PrankDetailViewModel.CallResult.InvalidInput ->
-                                Toast.makeText(context, "Invalid phone number", Toast.LENGTH_SHORT).show()
-                        }
+                        viewModel.startPrankCall(context)
                     } else if (!recordingConsent) {
                         Toast.makeText(context, "Please agree to recording consent", Toast.LENGTH_SHORT).show()
                     } else if (phoneNumber.length < 7) {
                         Toast.makeText(context, "Enter a valid phone number", Toast.LENGTH_SHORT).show()
-                    } else {
-                        Toast.makeText(context, "Not enough credits!", Toast.LENGTH_SHORT).show()
                     }
                 },
+                enabled = callState !is PrankDetailViewModel.CallState.Calling,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(56.dp),
                 shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Crimson,
-                    contentColor = TextPrimary
-                )
+                colors = ButtonDefaults.buttonColors(containerColor = Crimson, contentColor = TextPrimary)
             ) {
-                Icon(
-                    imageVector = Icons.Filled.Call,
-                    contentDescription = null,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Start Prank Call",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp
-                )
+                if (callState is PrankDetailViewModel.CallState.Calling) {
+                    CircularProgressIndicator(color = TextPrimary, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Calling...", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                } else {
+                    Icon(Icons.Filled.Call, null, modifier = Modifier.size(24.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Start Prank Call", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
 
             Text(
-                text = "1 credit will be used for this call",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Calls are made using a private number",
+                text = "Calls are made using a private number via PrankCaller.io",
                 style = MaterialTheme.typography.bodySmall,
                 color = TextSecondary.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center,

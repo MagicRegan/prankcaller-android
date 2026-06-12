@@ -103,4 +103,23 @@ object CountryCodes {
             it.name.lowercase().contains(q) || it.code.contains(q)
         }
     }
+
+    data class ParsedNumber(
+        val countryCode: String,
+        val localNumber: String
+    )
+
+    fun parseInternationalNumber(fullNumber: String): ParsedNumber {
+        val digits = fullNumber.replace("[^0-9]".toRegex(), "")
+
+        // Try matching longest country codes first (4, 3, 2, 1 digits)
+        val allCodes = countries.map { it.code.removePrefix("+") }.distinct().sortedByDescending { it.length }
+        for (code in allCodes) {
+            if (digits.startsWith(code)) {
+                return ParsedNumber("+$code", digits.removePrefix(code))
+            }
+        }
+
+        return ParsedNumber("+1", digits)
+    }
 }

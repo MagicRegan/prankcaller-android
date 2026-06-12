@@ -1,0 +1,24 @@
+{
+  "project_info": {
+    "project_number": "41200827050",
+    "firebase_url": "https://prank-caller-32253.firebaseio.com",
+    "project_id": "prank-caller-32253",
+    "storage_bucket": "prank-caller-32253.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:41200827050:android:c8bd9e453444206e89eed3",
+        "android_client_info": {
+          "package_name": "com.magicregan.prankcaller"
+        }
+      },
+      "api_key": [
+        {
+          "current_key": "AIzaSyCavu7eOOpfQeXXEPCmSAePSzE877B182E"
+        }
+      ]
+    }
+  ],
+  "configuration_version": "1"
+}
