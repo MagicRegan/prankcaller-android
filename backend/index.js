@@ -311,17 +311,18 @@ app.post('/api/call', authMiddleware, async (req, res) => {
     ];
 
     try {
-      // Use answer_url approach instead of inline NCCO for better compatibility
+      // Vonage requires a valid phone number as 'from' — 'restricted' is not accepted.
+      // When no Vonage virtual number is configured, use the target's own number as
+      // the caller ID (recipient sees a call "from themselves" which is common in prank apps).
+      const fromNumber = (VONAGE_FROM && VONAGE_FROM !== 'restricted' && /^\d+$/.test(VONAGE_FROM))
+        ? VONAGE_FROM
+        : fullNumber;
+      
       const callOpts = {
         to: [{ type: 'phone', number: fullNumber }],
-        from: { type: 'phone', number: VONAGE_FROM === 'restricted' ? undefined : VONAGE_FROM },
+        from: { type: 'phone', number: fromNumber },
         ncco: ncco,
       };
-      // If no from number, use random_from_number flag
-      if (!callOpts.from) {
-        delete callOpts.from;
-        callOpts.random_from_number = true;
-      }
       console.log('Vonage call opts:', JSON.stringify(callOpts));
       const response = await vonage.voice.createOutboundCall(callOpts);
 
