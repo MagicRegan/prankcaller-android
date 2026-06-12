@@ -4,11 +4,15 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.Call
@@ -147,7 +151,7 @@ private fun MainContent(exoPlayer: ExoPlayer) {
         bottomNavItems.any { it.route == dest.route }
     } == true
 
-    Column(modifier = Modifier.fillMaxSize()) {
+    Column(modifier = Modifier.fillMaxSize().background(DarkBackground)) {
         Box(modifier = Modifier.weight(1f)) {
             NavGraph(
                 navController = navController,
@@ -190,7 +194,9 @@ private fun MainContent(exoPlayer: ExoPlayer) {
         if (showBottomBar) {
             NavigationBar(
                 containerColor = BottomNavBackground,
-                modifier = Modifier.height(72.dp)
+                modifier = Modifier
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+                    .height(72.dp)
             ) {
                 bottomNavItems.forEach { item ->
                     val selected = currentDestination?.hierarchy?.any {

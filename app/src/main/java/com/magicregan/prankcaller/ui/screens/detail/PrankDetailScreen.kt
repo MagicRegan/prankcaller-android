@@ -1,6 +1,10 @@
 package com.magicregan.prankcaller.ui.screens.detail
 
 import android.Manifest
+import android.app.Activity
+import android.content.Intent
+import android.net.Uri
+import android.provider.ContactsContract
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,12 +14,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -45,6 +53,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -90,6 +99,46 @@ fun PrankDetailScreen(
         }
     }
 
+    // Contacts picker
+    val contactPickerLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickContact()
+    ) { uri: Uri? ->
+        uri?.let {
+            val cursor = context.contentResolver.query(
+                Uri.withAppendedPath(it, ContactsContract.Contacts.Entity.CONTENT_DIRECTORY),
+                null, null, null, null
+            )
+            cursor?.use { c ->
+                while (c.moveToNext()) {
+                    val phoneIndex = c.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+                    if (phoneIndex >= 0) {
+                        val phone = c.getString(phoneIndex)
+                        if (phone != null) {
+                            val cleaned = phone.replace("[^0-9+]".toRegex(), "")
+                            if (cleaned.startsWith("+")) {
+                                val digits = cleaned.substring(1)
+                                viewModel.onPhoneNumberChange(digits)
+                            } else {
+                                viewModel.onPhoneNumberChange(cleaned)
+                            }
+                            break
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    val contactPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            contactPickerLauncher.launch(null)
+        } else {
+            Toast.makeText(context, "Contacts permission required", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     val currentPrank = prank ?: return
 
     Column(
@@ -102,6 +151,7 @@ fun PrankDetailScreen(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(CrimsonDark)
+                .windowInsetsPadding(WindowInsets.statusBars)
                 .padding(horizontal = 4.dp, vertical = 8.dp)
         ) {
             Row(
@@ -145,11 +195,11 @@ fun PrankDetailScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
-            // Prank image with play overlay
+            // Prank image with play overlay - responsive aspect ratio
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(220.dp)
+                    .aspectRatio(16f / 9f)
                     .clip(RoundedCornerShape(12.dp))
             ) {
                 AsyncImage(
@@ -181,7 +231,6 @@ fun PrankDetailScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Title
             Text(
                 text = currentPrank.name,
                 style = MaterialTheme.typography.headlineMedium,
@@ -191,7 +240,6 @@ fun PrankDetailScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Description
             Text(
                 text = currentPrank.longDescription,
                 style = MaterialTheme.typography.bodyLarge,
@@ -248,7 +296,13 @@ fun PrankDetailScreen(
                         fontSize = 14.sp
                     )
                 }
-                IconButton(onClick = { }) {
+                IconButton(onClick = {
+                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_TEXT, "Check out this prank: ${currentPrank.name} on Prank Caller!")
+                    }
+                    context.startActivity(Intent.createChooser(shareIntent, "Share Prank"))
+                }) {
                     Icon(
                         imageVector = Icons.Filled.Share,
                         contentDescription = "Share",
@@ -309,7 +363,11 @@ fun PrankDetailScreen(
             PhoneNumberInput(
                 phoneNumber = phoneNumber,
                 onPhoneNumberChange = viewModel::onPhoneNumberChange,
-                countryCode = countryCode
+                countryCode = countryCode,
+                onCountryCodeChange = viewModel::onCountryCodeChange,
+                onContactsClick = {
+                    contactPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
+                }
             )
 
             Spacer(modifier = Modifier.height(20.dp))
@@ -343,6 +401,8 @@ fun PrankDetailScreen(
                 onClick = {
                     if (viewModel.canStartCall()) {
                         callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+                    } else if (!recordingConsent) {
+                        Toast.makeText(context, "Please agree to recording consent", Toast.LENGTH_SHORT).show()
                     } else if (phoneNumber.length < 7) {
                         Toast.makeText(context, "Enter a valid phone number", Toast.LENGTH_SHORT).show()
                     } else {
@@ -377,7 +437,8 @@ fun PrankDetailScreen(
                 text = "1 credit will be used for this call",
                 style = MaterialTheme.typography.bodyMedium,
                 color = TextSecondary,
-                modifier = Modifier.align(Alignment.CenterHorizontally)
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(modifier = Modifier.height(24.dp))

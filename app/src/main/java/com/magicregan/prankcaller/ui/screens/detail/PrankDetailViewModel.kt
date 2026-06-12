@@ -46,6 +46,10 @@ class PrankDetailViewModel @Inject constructor(
         _phoneNumber.value = number
     }
 
+    fun onCountryCodeChange(code: String) {
+        _countryCode.value = code
+    }
+
     fun onRecordingConsentChange(consent: Boolean) {
         _recordingConsent.value = consent
     }
