@@ -267,9 +267,17 @@ app.post('/api/call', authMiddleware, async (req, res) => {
       return res.status(400).json({ status: 'error', message: 'Prank not found' });
     }
 
-    // Format phone number
-    const cleanNumber = callTo.replace(/[^0-9+]/g, '');
-    const fullNumber = (countryCode || '') + cleanNumber;
+    // Format phone number to E.164 (digits only, no + prefix)
+    let cleanNumber = callTo.replace(/[^0-9]/g, '');
+    let code = (countryCode || '').replace(/[^0-9]/g, '');
+    
+    // Remove leading 0 from local number (e.g., 0435... → 435...)
+    if (cleanNumber.startsWith('0')) {
+      cleanNumber = cleanNumber.substring(1);
+    }
+    
+    const fullNumber = code + cleanNumber;
+    console.log(`Call request: countryCode=${countryCode}, callTo=${callTo}, formatted=${fullNumber}`);
 
     // Create call record
     const callId = uuidv4();
@@ -303,11 +311,19 @@ app.post('/api/call', authMiddleware, async (req, res) => {
     ];
 
     try {
-      const response = await vonage.voice.createOutboundCall({
+      // Use answer_url approach instead of inline NCCO for better compatibility
+      const callOpts = {
         to: [{ type: 'phone', number: fullNumber }],
-        from: { type: 'phone', number: VONAGE_FROM },
+        from: { type: 'phone', number: VONAGE_FROM === 'restricted' ? undefined : VONAGE_FROM },
         ncco: ncco,
-      });
+      };
+      // If no from number, use random_from_number flag
+      if (!callOpts.from) {
+        delete callOpts.from;
+        callOpts.random_from_number = true;
+      }
+      console.log('Vonage call opts:', JSON.stringify(callOpts));
+      const response = await vonage.voice.createOutboundCall(callOpts);
 
       db.prepare('UPDATE calls SET status = ?, vonage_uuid = ? WHERE id = ?')
         .run('ringing', response.uuid, callId);
@@ -328,9 +344,13 @@ app.post('/api/call', authMiddleware, async (req, res) => {
       // Refund credit on Vonage failure
       db.prepare('UPDATE users SET credits = credits + 1 WHERE id = ?').run(req.userId);
       db.prepare('UPDATE calls SET status = ? WHERE id = ?').run('failed', callId);
+      const errDetail = vonageErr.response?.data 
+        ? JSON.stringify(vonageErr.response.data) 
+        : (vonageErr.message || 'Unknown Vonage error');
+      console.error('Vonage call error:', errDetail, vonageErr);
       res.status(500).json({
         status: 'error',
-        message: 'Failed to place call: ' + (vonageErr.message || 'Unknown Vonage error'),
+        message: 'Failed to place call: ' + errDetail,
       });
     }
   } catch (e) {
