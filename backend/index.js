@@ -24,6 +24,8 @@ const VONAGE_API_SECRET = process.env.VONAGE_API_SECRET;
 const VONAGE_APPLICATION_ID = process.env.VONAGE_APPLICATION_ID;
 const VONAGE_PRIVATE_KEY = process.env.VONAGE_PRIVATE_KEY;
 const VONAGE_FROM = process.env.VONAGE_PHONE_NUMBER || 'restricted';
+const VONAGE_FROM_AU = process.env.VONAGE_PHONE_NUMBER_AU || '61370490194';
+const VONAGE_FROM_INT = process.env.VONAGE_PHONE_NUMBER_INT || '12046501444';
 const FREE_CREDITS = 5;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
@@ -311,12 +313,19 @@ app.post('/api/call', authMiddleware, async (req, res) => {
     ];
 
     try {
-      // Vonage requires a valid phone number as 'from' — 'restricted' is not accepted.
-      // When no Vonage virtual number is configured, use the target's own number as
-      // the caller ID (recipient sees a call "from themselves" which is common in prank apps).
-      const fromNumber = (VONAGE_FROM && VONAGE_FROM !== 'restricted' && /^\d+$/.test(VONAGE_FROM))
-        ? VONAGE_FROM
-        : fullNumber;
+      // Pick caller ID based on target country:
+      // - Australian numbers (starting with 61) use the AU virtual number
+      // - All other numbers use the international (Canadian) number
+      let fromNumber;
+      if (fullNumber.startsWith('61')) {
+        fromNumber = VONAGE_FROM_AU;
+      } else {
+        fromNumber = VONAGE_FROM_INT;
+      }
+      // Fallback: if no virtual numbers configured, use target's own number
+      if (!fromNumber || !/^\d+$/.test(fromNumber)) {
+        fromNumber = fullNumber;
+      }
       
       const callOpts = {
         to: [{ type: 'phone', number: fullNumber }],
