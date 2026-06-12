@@ -21,13 +21,33 @@ const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || 'prankcaller-secret-key-change-in-production';
 const VONAGE_API_KEY = process.env.VONAGE_API_KEY;
 const VONAGE_API_SECRET = process.env.VONAGE_API_SECRET;
+const VONAGE_APPLICATION_ID = process.env.VONAGE_APPLICATION_ID;
+const VONAGE_PRIVATE_KEY = process.env.VONAGE_PRIVATE_KEY;
 const VONAGE_FROM = process.env.VONAGE_PHONE_NUMBER || 'restricted';
 const FREE_CREDITS = 5;
 const BASE_URL = process.env.BASE_URL || `http://localhost:${PORT}`;
 
 // ─── Vonage Client ───────────────────────────────────────────────────────────
 let vonage = null;
-if (VONAGE_API_KEY && VONAGE_API_SECRET) {
+if (VONAGE_APPLICATION_ID && VONAGE_PRIVATE_KEY) {
+  // Voice API requires Application credentials (applicationId + privateKey)
+  const fs = require('fs');
+  let privateKey = VONAGE_PRIVATE_KEY;
+  // If it's a file path, read the file; otherwise treat as inline key
+  if (privateKey && !privateKey.includes('BEGIN') && fs.existsSync(privateKey)) {
+    privateKey = fs.readFileSync(privateKey, 'utf-8');
+  }
+  // Replace escaped newlines with actual newlines (for env vars)
+  privateKey = privateKey.replace(/\\n/g, '\n');
+
+  vonage = new Vonage({
+    apiKey: VONAGE_API_KEY,
+    apiSecret: VONAGE_API_SECRET,
+    applicationId: VONAGE_APPLICATION_ID,
+    privateKey: privateKey,
+  });
+} else if (VONAGE_API_KEY && VONAGE_API_SECRET) {
+  // Fallback: basic auth (won't work for Voice API but useful for health check)
   vonage = new Vonage({
     apiKey: VONAGE_API_KEY,
     apiSecret: VONAGE_API_SECRET,
@@ -357,11 +377,16 @@ app.post('/webhooks/answer', (req, res) => {
 
 // ─── Health Check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', vonage: !!vonage });
+  res.json({
+    status: 'ok',
+    vonage: !!vonage,
+    voiceReady: !!(VONAGE_APPLICATION_ID && VONAGE_PRIVATE_KEY),
+  });
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Prank Caller backend running on port ${PORT}`);
   console.log(`Vonage configured: ${!!vonage}`);
+  console.log(`Voice API ready: ${!!(VONAGE_APPLICATION_ID && VONAGE_PRIVATE_KEY)}`);
 });
