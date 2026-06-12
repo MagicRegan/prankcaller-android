@@ -230,6 +230,19 @@ app.post('/api/credits/add', authMiddleware, (req, res) => {
   res.json({ status: 'success', data: { credits: user.credits } });
 });
 
+// ─── Admin: Reset credits (temporary) ────────────────────────────────────────
+app.post('/api/admin/reset-credits', (req, res) => {
+  const { email, amount, adminKey } = req.body;
+  if (adminKey !== JWT_SECRET) return res.status(403).json({ status: 'error', message: 'Forbidden' });
+  const credits = parseInt(amount) || 25;
+  if (email) {
+    db.prepare('UPDATE users SET credits = ? WHERE email = ?').run(credits, email);
+  } else {
+    db.prepare('UPDATE users SET credits = ?').run(credits);
+  }
+  res.json({ status: 'success', message: `Credits reset to ${credits}` });
+});
+
 // ─── Pranks Routes ───────────────────────────────────────────────────────────
 app.get('/api/pranks', (req, res) => {
   const pranks = db.prepare('SELECT * FROM pranks ORDER BY calls_sent DESC').all();
