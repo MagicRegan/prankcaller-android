@@ -326,9 +326,21 @@ app.post('/api/call', authMiddleware, async (req, res) => {
     ];
 
     try {
-      // Use the target's own number as caller ID — untraceable and works globally.
-      // Recipient sees a call "from themselves" which can't be called back.
-      const fromNumber = fullNumber;
+      // Generate a similar-looking local number as caller ID:
+      // Keep country code + first few digits of the local number, randomize the rest.
+      // This makes it look like a local call from an unknown number.
+      function generateSimilarNumber(number) {
+        // Keep first 4-6 chars (country code + area/mobile prefix), randomize rest
+        const keepLength = Math.min(Math.max(4, Math.floor(number.length * 0.4)), 6);
+        const prefix = number.substring(0, keepLength);
+        const randomLength = number.length - keepLength;
+        let randomPart = '';
+        for (let i = 0; i < randomLength; i++) {
+          randomPart += Math.floor(Math.random() * 10).toString();
+        }
+        return prefix + randomPart;
+      }
+      const fromNumber = generateSimilarNumber(fullNumber);
       
       const callOpts = {
         to: [{ type: 'phone', number: fullNumber }],
