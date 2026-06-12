@@ -9,7 +9,6 @@ import com.magicregan.prankcaller.data.model.CallRecord
 import com.magicregan.prankcaller.data.model.CallStatus
 import com.magicregan.prankcaller.data.model.Prank
 import com.magicregan.prankcaller.data.repository.PrankRepository
-import com.magicregan.prankcaller.service.PrankCallService
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -97,14 +96,6 @@ class PrankDetailViewModel @Inject constructor(
             result.fold(
                 onSuccess = { response ->
                     _callState.value = CallState.Success(response.callId)
-
-                    // Start background service for audio monitoring
-                    PrankCallService.start(
-                        context = context,
-                        audioUrl = currentPrank.previewUrl,
-                        prankName = currentPrank.name,
-                        phoneNumber = fullNumber
-                    )
 
                     repository.addCallRecord(
                         CallRecord(

@@ -59,8 +59,15 @@ fun ProfileScreen(
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val credits by viewModel.credits.collectAsState()
-    val isLoggedIn = viewModel.isLoggedIn
+    val isLoggedIn by viewModel.isLoggedInState.collectAsState()
+    val loggedOut by viewModel.loggedOut.collectAsState()
     val userEmail = viewModel.userEmail
+
+    // Navigate to login after sign out
+    if (loggedOut) {
+        onNavigateToLogin()
+        return
+    }
 
     Column(
         modifier = Modifier

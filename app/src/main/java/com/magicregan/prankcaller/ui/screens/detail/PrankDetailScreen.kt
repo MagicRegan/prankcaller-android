@@ -174,7 +174,6 @@ fun PrankDetailScreen(
                 Button(
                     onClick = {
                         viewModel.resetCallState()
-                        onStartCall(currentPrank.id)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(8.dp),
