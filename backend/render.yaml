@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: prankcaller-backend
+    runtime: node
+    buildCommand: npm install
+    startCommand: node index.js
+    envVars:
+      - key: JWT_SECRET
+        generateValue: true
+      - key: VONAGE_API_KEY
+        sync: false
+      - key: VONAGE_API_SECRET
+        sync: false
+      - key: VONAGE_PHONE_NUMBER
+        value: restricted
+      - key: NODE_ENV
+        value: production

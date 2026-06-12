@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="crimson">#FFDC143C</color>
+    <color name="dark_bg">#FF1A1A2E</color>
+    <color name="card_bg">#FF16213E</color>
+    <color name="ic_launcher_background">#FF1A1A1A</color>
+</resources>
