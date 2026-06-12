@@ -38,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.clickable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -54,9 +55,12 @@ import com.magicregan.prankcaller.ui.theme.TextSecondary
 
 @Composable
 fun ProfileScreen(
+    onNavigateToLogin: () -> Unit = {},
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val credits by viewModel.credits.collectAsState()
+    val isLoggedIn = viewModel.isLoggedIn
+    val userEmail = viewModel.userEmail
 
     Column(
         modifier = Modifier
@@ -110,7 +114,7 @@ fun ProfileScreen(
                 Spacer(modifier = Modifier.height(12.dp))
 
                 Text(
-                    text = "Prankster",
+                    text = if (isLoggedIn) (userEmail ?: "Prankster") else "Not logged in",
                     color = TextPrimary,
                     fontWeight = FontWeight.Bold,
                     fontSize = 20.sp
@@ -157,11 +161,21 @@ fun ProfileScreen(
                 title = "About",
                 subtitle = "Version 1.0"
             )
-            ProfileMenuItem(
-                icon = Icons.AutoMirrored.Filled.Logout,
-                title = "Sign Out",
-                subtitle = ""
-            )
+            if (isLoggedIn) {
+                ProfileMenuItem(
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    title = "Sign Out",
+                    subtitle = "",
+                    onClick = { viewModel.logout() }
+                )
+            } else {
+                ProfileMenuItem(
+                    icon = Icons.Filled.Person,
+                    title = "Log In / Sign Up",
+                    subtitle = "Create account or sign in",
+                    onClick = onNavigateToLogin
+                )
+            }
         }
     }
 }
@@ -170,7 +184,8 @@ fun ProfileScreen(
 private fun ProfileMenuItem(
     icon: ImageVector,
     title: String,
-    subtitle: String
+    subtitle: String,
+    onClick: () -> Unit = {}
 ) {
     Card(
         shape = RoundedCornerShape(12.dp),
@@ -178,6 +193,7 @@ private fun ProfileMenuItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
+            .clickable { onClick() }
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

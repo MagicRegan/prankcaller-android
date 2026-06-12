@@ -21,20 +21,23 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -60,14 +63,13 @@ fun PurchaseScreen(
     viewModel: PurchaseViewModel = hiltViewModel()
 ) {
     val credits by viewModel.credits.collectAsState()
+    val context = LocalContext.current
 
     val packages = listOf(
-        CreditPackage(10, "$1.99"),
-        CreditPackage(25, "$3.99"),
-        CreditPackage(50, "$6.99", popular = true),
-        CreditPackage(100, "$11.99"),
-        CreditPackage(250, "$24.99"),
-        CreditPackage(500, "$39.99")
+        CreditPackage(20, "$6.99"),
+        CreditPackage(40, "$10.99", popular = true),
+        CreditPackage(120, "$26.99"),
+        CreditPackage(160, "$32.99")
     )
 
     Column(
@@ -91,6 +93,16 @@ fun PurchaseScreen(
                 fontSize = 22.sp,
                 modifier = Modifier.align(Alignment.Center)
             )
+            IconButton(
+                onClick = { viewModel.syncCreditsFromApi() },
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Refresh,
+                    contentDescription = "Sync Credits",
+                    tint = TextPrimary
+                )
+            }
         }
 
         LazyColumn(
@@ -129,11 +141,18 @@ fun PurchaseScreen(
                             fontWeight = FontWeight.Bold,
                             fontSize = 42.sp
                         )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "1 credit = 1 prank call",
+                            color = TextSecondary,
+                            fontSize = 12.sp
+                        )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.height(12.dp))
-
+            item {
+                Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = "Buy Credits",
                     color = TextPrimary,
@@ -145,7 +164,40 @@ fun PurchaseScreen(
             items(packages) { pkg ->
                 CreditPackageCard(
                     creditPackage = pkg,
-                    onBuyClick = { viewModel.addCredits(pkg.credits) }
+                    onBuyClick = { viewModel.purchaseCredits(context, pkg) }
+                )
+            }
+
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Watch ad for free credits
+                OutlinedButton(
+                    onClick = { viewModel.addFreeCredits() },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, GoldCredits.copy(alpha = 0.5f)),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = GoldCredits)
+                ) {
+                    Icon(Icons.Filled.Star, null, modifier = Modifier.size(20.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Get 5 Free Credits",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                Text(
+                    text = "Tap the refresh icon above to sync credits after purchasing.\nCredits persist between app sessions.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = TextSecondary.copy(alpha = 0.6f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
         }
@@ -188,7 +240,7 @@ private fun CreditPackageCard(
                     }
                 }
                 Text(
-                    text = "1 credit = 1 prank call",
+                    text = "${"%.2f".format(creditPackage.price.removePrefix("$").toDouble() / creditPackage.credits)}/call",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
