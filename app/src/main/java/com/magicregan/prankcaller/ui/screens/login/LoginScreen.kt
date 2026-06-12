@@ -1,56 +1,80 @@
 package com.magicregan.prankcaller.ui.screens.login
 
-import android.annotation.SuppressLint
-import android.graphics.Bitmap
-import android.view.ViewGroup
-import android.webkit.CookieManager
-import android.webkit.JavascriptInterface
-import android.webkit.WebChromeClient
-import android.webkit.WebResourceRequest
-import android.webkit.WebView
-import android.webkit.WebViewClient
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.magicregan.prankcaller.ui.theme.Crimson
 import com.magicregan.prankcaller.ui.theme.CrimsonDark
 import com.magicregan.prankcaller.ui.theme.DarkBackground
+import com.magicregan.prankcaller.ui.theme.CardBackground
 import com.magicregan.prankcaller.ui.theme.TextPrimary
+import com.magicregan.prankcaller.ui.theme.TextSecondary
 
-@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onBack: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    var isLoading by remember { mutableStateOf(true) }
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var passwordVisible by remember { mutableStateOf(false) }
+    var isRegisterMode by remember { mutableStateOf(true) }
+
+    val uiState by viewModel.uiState.collectAsState()
+
+    if (uiState is LoginUiState.Success) {
+        onLoginSuccess()
+        return
+    }
 
     Column(
         modifier = Modifier
@@ -76,7 +100,7 @@ fun LoginScreen(
                 )
             }
             Text(
-                text = "Sign In",
+                text = if (isRegisterMode) "Create Account" else "Sign In",
                 style = MaterialTheme.typography.headlineMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
@@ -85,189 +109,155 @@ fun LoginScreen(
             )
         }
 
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(DarkBackground)
+                .verticalScroll(rememberScrollState())
+                .padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    WebView(context).apply {
-                        layoutParams = ViewGroup.LayoutParams(
-                            ViewGroup.LayoutParams.MATCH_PARENT,
-                            ViewGroup.LayoutParams.MATCH_PARENT
-                        )
-                        settings.javaScriptEnabled = true
-                        settings.domStorageEnabled = true
-                        settings.databaseEnabled = true
-                        settings.setSupportMultipleWindows(false)
+            Spacer(modifier = Modifier.height(32.dp))
 
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
-
-                        addJavascriptInterface(
-                            TokenBridge { idToken, refreshToken, email, uid ->
-                                viewModel.onTokenReceived(idToken, refreshToken, email, uid)
-                                onLoginSuccess()
-                            },
-                            "AndroidBridge"
-                        )
-
-                        webViewClient = object : WebViewClient() {
-                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                                super.onPageStarted(view, url, favicon)
-                                isLoading = true
-                            }
-
-                            override fun onPageFinished(view: WebView?, url: String?) {
-                                super.onPageFinished(view, url)
-                                isLoading = false
-                                injectTokenExtractor(view)
-                            }
-
-                            override fun shouldOverrideUrlLoading(
-                                view: WebView?,
-                                request: WebResourceRequest?
-                            ): Boolean {
-                                val url = request?.url?.toString() ?: return false
-                                if (url.startsWith("https://prankcaller.io") ||
-                                    url.startsWith("https://accounts.google.com") ||
-                                    url.contains("googleapis.com") ||
-                                    url.contains("firebaseapp.com") ||
-                                    url.contains("gstatic.com") ||
-                                    url.contains("google.com")
-                                ) {
-                                    return false
-                                }
-                                return false
-                            }
-                        }
-
-                        webChromeClient = WebChromeClient()
-
-                        loadUrl("https://prankcaller.io/")
-                    }
-                }
+            Text(
+                text = if (isRegisterMode)
+                    "Create a free account to start making prank calls"
+                else
+                    "Sign in to your account",
+                color = TextSecondary,
+                fontSize = 16.sp,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
             )
 
-            if (isLoading) {
-                CircularProgressIndicator(
-                    color = Crimson,
-                    modifier = Modifier
-                        .align(Alignment.Center)
-                        .size(48.dp)
+            Spacer(modifier = Modifier.height(32.dp))
+
+            val textFieldColors = OutlinedTextFieldDefaults.colors(
+                focusedTextColor = TextPrimary,
+                unfocusedTextColor = TextPrimary,
+                focusedBorderColor = Crimson,
+                unfocusedBorderColor = TextSecondary.copy(alpha = 0.5f),
+                focusedLabelColor = Crimson,
+                unfocusedLabelColor = TextSecondary,
+                cursorColor = Crimson,
+                focusedContainerColor = CardBackground,
+                unfocusedContainerColor = CardBackground
+            )
+
+            OutlinedTextField(
+                value = email,
+                onValueChange = { email = it },
+                label = { Text("Email") },
+                leadingIcon = {
+                    Icon(Icons.Default.Email, "Email", tint = TextSecondary)
+                },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                singleLine = true,
+                colors = textFieldColors,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = password,
+                onValueChange = { password = it },
+                label = { Text("Password") },
+                leadingIcon = {
+                    Icon(Icons.Default.Lock, "Password", tint = TextSecondary)
+                },
+                trailingIcon = {
+                    IconButton(onClick = { passwordVisible = !passwordVisible }) {
+                        Icon(
+                            if (passwordVisible) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                            "Toggle password visibility",
+                            tint = TextSecondary
+                        )
+                    }
+                },
+                visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                singleLine = true,
+                colors = textFieldColors,
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (uiState is LoginUiState.Error) {
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = (uiState as LoginUiState.Error).message,
+                    color = Color.Red,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
                 )
             }
-        }
-    }
-}
 
-private fun injectTokenExtractor(webView: WebView?) {
-    webView?.evaluateJavascript(
-        """
-        (function() {
-            // Check if we already set up the listener
-            if (window._prankTokenListenerSet) return;
-            window._prankTokenListenerSet = true;
-            
-            // Poll for Firebase auth state
-            function checkAuth() {
-                try {
-                    // Try to access Firebase auth
-                    if (typeof firebase !== 'undefined' && firebase.auth) {
-                        var user = firebase.auth().currentUser;
-                        if (user) {
-                            user.getIdToken().then(function(idToken) {
-                                // Get the refresh token from the internal state
-                                var refreshToken = user.refreshToken || '';
-                                var email = user.email || '';
-                                var uid = user.uid || '';
-                                if (idToken && typeof AndroidBridge !== 'undefined') {
-                                    AndroidBridge.onToken(idToken, refreshToken, email, uid);
-                                }
-                            });
-                            return;
-                        }
-                        
-                        // Set up auth state listener
-                        firebase.auth().onAuthStateChanged(function(user) {
-                            if (user) {
-                                user.getIdToken().then(function(idToken) {
-                                    var refreshToken = user.refreshToken || '';
-                                    var email = user.email || '';
-                                    var uid = user.uid || '';
-                                    if (typeof AndroidBridge !== 'undefined') {
-                                        AndroidBridge.onToken(idToken, refreshToken, email, uid);
-                                    }
-                                });
-                            }
-                        });
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Button(
+                onClick = {
+                    if (isRegisterMode) {
+                        viewModel.register(email, password)
                     } else {
-                        // Firebase not loaded yet, retry
-                        setTimeout(checkAuth, 1000);
+                        viewModel.login(email, password)
                     }
-                } catch(e) {
-                    setTimeout(checkAuth, 1000);
+                },
+                enabled = email.isNotBlank() && password.length >= 6 && uiState !is LoginUiState.Loading,
+                colors = ButtonDefaults.buttonColors(containerColor = Crimson),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(52.dp)
+            ) {
+                if (uiState is LoginUiState.Loading) {
+                    CircularProgressIndicator(
+                        color = Color.White,
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text = if (isRegisterMode) "Create Account" else "Sign In",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
                 }
             }
-            
-            // Also check IndexedDB for stored tokens
-            function checkStoredToken() {
-                try {
-                    var request = indexedDB.open('firebaseLocalStorageDb');
-                    request.onsuccess = function(event) {
-                        var db = event.target.result;
-                        if (!db.objectStoreNames.contains('firebaseLocalStorage')) {
-                            setTimeout(checkStoredToken, 2000);
-                            return;
-                        }
-                        var tx = db.transaction('firebaseLocalStorage', 'readonly');
-                        var store = tx.objectStore('firebaseLocalStorage');
-                        var getAllReq = store.getAll();
-                        getAllReq.onsuccess = function() {
-                            var results = getAllReq.result;
-                            for (var i = 0; i < results.length; i++) {
-                                var item = results[i];
-                                if (item && item.value && item.value.stsTokenManager) {
-                                    var token = item.value.stsTokenManager.accessToken;
-                                    var refresh = item.value.stsTokenManager.refreshToken || '';
-                                    var email = item.value.email || '';
-                                    var uid = item.value.uid || '';
-                                    if (token && typeof AndroidBridge !== 'undefined') {
-                                        AndroidBridge.onToken(token, refresh, email, uid);
-                                        return;
-                                    }
-                                }
-                            }
-                            setTimeout(checkStoredToken, 2000);
-                        };
-                    };
-                    request.onerror = function() {
-                        setTimeout(checkStoredToken, 2000);
-                    };
-                } catch(e) {
-                    setTimeout(checkStoredToken, 2000);
-                }
+
+            Spacer(modifier = Modifier.height(20.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.Center,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (isRegisterMode) "Already have an account? " else "Don't have an account? ",
+                    color = TextSecondary,
+                    fontSize = 14.sp
+                )
+                Text(
+                    text = if (isRegisterMode) "Sign In" else "Create Account",
+                    color = Crimson,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        isRegisterMode = !isRegisterMode
+                        viewModel.clearError()
+                    }
+                )
             }
-            
-            checkAuth();
-            checkStoredToken();
-        })();
-        """.trimIndent(),
-        null
-    )
-}
 
-class TokenBridge(
-    private val onToken: (idToken: String, refreshToken: String, email: String, uid: String) -> Unit
-) {
-    private var tokenSent = false
+            Spacer(modifier = Modifier.height(24.dp))
 
-    @JavascriptInterface
-    fun onToken(idToken: String, refreshToken: String, email: String, uid: String) {
-        if (!tokenSent && idToken.isNotEmpty()) {
-            tokenSent = true
-            onToken.invoke(idToken, refreshToken, email, uid)
+            Text(
+                text = "You'll get 5 free credits on sign up!",
+                color = TextSecondary.copy(alpha = 0.7f),
+                fontSize = 13.sp,
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

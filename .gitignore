@@ -12,3 +12,8 @@ app/build/
 *.apk
 *.aab
 *.jks
+backend/node_modules/
+backend/.env
+backend/prankcaller.db
+backend/prankcaller.db-shm
+backend/prankcaller.db-wal

@@ -5,7 +5,6 @@ import android.content.SharedPreferences
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.FormBody
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -28,13 +27,9 @@ class PrankCallerApi @Inject constructor(
     private val prefs: SharedPreferences =
         context.getSharedPreferences("prank_auth", Context.MODE_PRIVATE)
 
-    private var cachedIdToken: String?
-        get() = prefs.getString(KEY_ID_TOKEN, null)
-        set(value) { prefs.edit().putString(KEY_ID_TOKEN, value).apply() }
-
-    private var cachedRefreshToken: String?
-        get() = prefs.getString(KEY_REFRESH_TOKEN, null)
-        set(value) { prefs.edit().putString(KEY_REFRESH_TOKEN, value).apply() }
+    private var cachedToken: String?
+        get() = prefs.getString(KEY_TOKEN, null)
+        set(value) { prefs.edit().putString(KEY_TOKEN, value).apply() }
 
     private var cachedEmail: String?
         get() = prefs.getString(KEY_EMAIL, null)
@@ -45,7 +40,7 @@ class PrankCallerApi @Inject constructor(
         set(value) { prefs.edit().putString(KEY_USER_ID, value).apply() }
 
     val isLoggedIn: Boolean
-        get() = cachedIdToken != null
+        get() = cachedToken != null
 
     val userEmail: String?
         get() = cachedEmail
@@ -53,32 +48,25 @@ class PrankCallerApi @Inject constructor(
     val userId: String?
         get() = cachedUserId
 
-    fun saveAuthTokens(idToken: String, refreshToken: String, email: String, uid: String) {
-        cachedIdToken = idToken
-        cachedRefreshToken = refreshToken
-        cachedEmail = email
-        cachedUserId = uid
-    }
-
     fun logout() {
-        cachedIdToken = null
-        cachedRefreshToken = null
+        cachedToken = null
         cachedEmail = null
         cachedUserId = null
         prefs.edit().clear().apply()
     }
 
-    private suspend fun refreshIdToken(): String? {
+    suspend fun register(email: String, password: String): Result<AuthResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                val refresh = cachedRefreshToken ?: return@withContext null
-                val body = "grant_type=refresh_token&refresh_token=$refresh"
-                    .toRequestBody("application/x-www-form-urlencoded".toMediaType())
+                val json = JSONObject().apply {
+                    put("email", email)
+                    put("password", password)
+                }
+                val body = json.toString()
+                    .toRequestBody("application/json".toMediaType())
 
                 val request = Request.Builder()
-                    .url("$TOKEN_BASE/v1/token?key=$FIREBASE_API_KEY")
-                    .addHeader("Referer", REFERER)
-                    .addHeader("Origin", ORIGIN)
+                    .url("${API_BASE}api/register")
                     .post(body)
                     .build()
 
@@ -86,41 +74,65 @@ class PrankCallerApi @Inject constructor(
                 val responseBody = response.body?.string() ?: ""
                 val responseJson = JSONObject(responseBody)
 
-                if (responseJson.has("id_token")) {
-                    val newIdToken = responseJson.getString("id_token")
-                    val newRefreshToken = responseJson.getString("refresh_token")
-                    cachedIdToken = newIdToken
-                    cachedRefreshToken = newRefreshToken
-                    newIdToken
+                if (responseJson.optString("status") == "success") {
+                    val data = responseJson.getJSONObject("data")
+                    val token = data.getString("token")
+                    val userId = data.getString("userId")
+                    val respEmail = data.getString("email")
+                    val credits = data.getInt("credits")
+
+                    cachedToken = token
+                    cachedEmail = respEmail
+                    cachedUserId = userId
+
+                    Result.success(AuthResponse(token, userId, respEmail, credits))
                 } else {
-                    null
+                    val msg = responseJson.optString("message", "Registration failed")
+                    Result.failure(Exception(msg))
                 }
-            } catch (_: Exception) {
-                null
+            } catch (e: Exception) {
+                Result.failure(Exception("Connection error: ${e.message}"))
             }
         }
     }
 
-    private suspend fun getToken(): String? {
-        return cachedIdToken ?: refreshIdToken()
-    }
-
-    suspend fun loginToApi() {
-        withContext(Dispatchers.IO) {
+    suspend fun login(email: String, password: String): Result<AuthResponse> {
+        return withContext(Dispatchers.IO) {
             try {
-                val token = getToken() ?: return@withContext
-                val body = FormBody.Builder()
-                    .add("source", "Android")
-                    .build()
+                val json = JSONObject().apply {
+                    put("email", email)
+                    put("password", password)
+                }
+                val body = json.toString()
+                    .toRequestBody("application/json".toMediaType())
+
                 val request = Request.Builder()
-                    .url("${API_BASE}v2/login")
-                    .addHeader("Authorization", "Bearer $token")
-                    .addHeader("Content-Type", "application/x-www-form-urlencoded")
+                    .url("${API_BASE}api/login")
                     .post(body)
                     .build()
-                client.newCall(request).execute().close()
-            } catch (_: Exception) {
-                // Non-critical
+
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                val responseJson = JSONObject(responseBody)
+
+                if (responseJson.optString("status") == "success") {
+                    val data = responseJson.getJSONObject("data")
+                    val token = data.getString("token")
+                    val userId = data.getString("userId")
+                    val respEmail = data.getString("email")
+                    val credits = data.getInt("credits")
+
+                    cachedToken = token
+                    cachedEmail = respEmail
+                    cachedUserId = userId
+
+                    Result.success(AuthResponse(token, userId, respEmail, credits))
+                } else {
+                    val msg = responseJson.optString("message", "Login failed")
+                    Result.failure(Exception(msg))
+                }
+            } catch (e: Exception) {
+                Result.failure(Exception("Connection error: ${e.message}"))
             }
         }
     }
@@ -128,9 +140,9 @@ class PrankCallerApi @Inject constructor(
     suspend fun getUserDetail(): Result<UserDetail> {
         return withContext(Dispatchers.IO) {
             try {
-                val token = getToken() ?: return@withContext Result.failure(Exception("Not logged in"))
+                val token = cachedToken ?: return@withContext Result.failure(Exception("Not logged in"))
                 val request = Request.Builder()
-                    .url("${API_BASE}v2/getUserDetail")
+                    .url("${API_BASE}api/user")
                     .addHeader("Authorization", "Bearer $token")
                     .get()
                     .build()
@@ -138,13 +150,38 @@ class PrankCallerApi @Inject constructor(
                 val body = response.body?.string() ?: ""
                 val json = JSONObject(body)
                 if (json.optString("status") == "success") {
-                    val data = json.optJSONObject("data")
-                    val minutes = data?.optInt("minutes", 0) ?: 0
-                    val freeCalls = data?.optInt("freeCalls", 0) ?: 0
-                    val isSubscription = data?.optString("isSubscription", "false") ?: "false"
-                    Result.success(UserDetail(minutes, freeCalls, isSubscription == "true"))
+                    val data = json.getJSONObject("data")
+                    val credits = data.optInt("credits", 0)
+                    Result.success(UserDetail(credits, 0, false))
                 } else {
                     Result.failure(Exception(json.optString("message", "Unknown error")))
+                }
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun addCredits(amount: Int): Result<Int> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = cachedToken ?: return@withContext Result.failure(Exception("Not logged in"))
+                val json = JSONObject().apply { put("amount", amount) }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
+
+                val request = Request.Builder()
+                    .url("${API_BASE}api/credits/add")
+                    .addHeader("Authorization", "Bearer $token")
+                    .post(body)
+                    .build()
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                val responseJson = JSONObject(responseBody)
+                if (responseJson.optString("status") == "success") {
+                    val credits = responseJson.getJSONObject("data").getInt("credits")
+                    Result.success(credits)
+                } else {
+                    Result.failure(Exception(responseJson.optString("message", "Failed")))
                 }
             } catch (e: Exception) {
                 Result.failure(e)
@@ -155,43 +192,96 @@ class PrankCallerApi @Inject constructor(
     suspend fun startCall(
         prankId: Int,
         callTo: String,
-        callFrom: String,
+        countryCode: String = "",
         recordCall: Boolean = false
     ): Result<CallResponse> {
         return withContext(Dispatchers.IO) {
             try {
-                val token = getToken() ?: return@withContext Result.failure(Exception("Not logged in"))
-                val uid = cachedUserId ?: ""
+                val token = cachedToken ?: return@withContext Result.failure(Exception("Not logged in"))
 
-                val body = FormBody.Builder()
-                    .add("user_id", uid)
-                    .add("source", "Android")
-                    .add("prankId", prankId.toString())
-                    .add("prankAI", "0")
-                    .add("country", "US")
-                    .add("callTo", callTo.replace("[- )(]".toRegex(), ""))
-                    .add("callFrom", callFrom.replace("[- )(]".toRegex(), ""))
-                    .add("listenLive", "1")
-                    .add("recordCall", if (recordCall) "1" else "0")
-                    .add("prankedRecording", "0")
-                    .build()
+                val json = JSONObject().apply {
+                    put("prankId", prankId)
+                    put("callTo", callTo.replace("[\\s()-]".toRegex(), ""))
+                    put("countryCode", countryCode)
+                }
+                val body = json.toString().toRequestBody("application/json".toMediaType())
 
                 val request = Request.Builder()
-                    .url("${API_BASE}v2/call")
+                    .url("${API_BASE}api/call")
                     .addHeader("Authorization", "Bearer $token")
                     .post(body)
                     .build()
 
                 val response = client.newCall(request).execute()
                 val responseBody = response.body?.string() ?: ""
-                val json = JSONObject(responseBody)
+                val responseJson = JSONObject(responseBody)
 
-                if (json.optString("status") == "success") {
-                    val sidToken = json.optString("sidToken", "")
-                    Result.success(CallResponse(true, sidToken, null))
+                if (responseJson.optString("status") == "success") {
+                    val data = responseJson.getJSONObject("data")
+                    val callId = data.getString("callId")
+                    val message = data.optString("message", "Call initiated!")
+                    val creditsRemaining = data.optInt("creditsRemaining", -1)
+                    Result.success(CallResponse(true, callId, message, creditsRemaining))
                 } else {
-                    val error = json.optString("message", "Call failed")
+                    val error = responseJson.optString("message", "Call failed")
                     Result.failure(Exception(error))
+                }
+            } catch (e: Exception) {
+                Result.failure(Exception("Connection error: ${e.message}"))
+            }
+        }
+    }
+
+    suspend fun getCallStatus(callId: String): Result<String> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = cachedToken ?: return@withContext Result.failure(Exception("Not logged in"))
+                val request = Request.Builder()
+                    .url("${API_BASE}api/call/$callId/status")
+                    .addHeader("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                val json = JSONObject(responseBody)
+                val status = json.optJSONObject("data")?.optString("status", "unknown") ?: "unknown"
+                Result.success(status)
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+    }
+
+    suspend fun getCallHistory(): Result<List<CallRecord>> {
+        return withContext(Dispatchers.IO) {
+            try {
+                val token = cachedToken ?: return@withContext Result.failure(Exception("Not logged in"))
+                val request = Request.Builder()
+                    .url("${API_BASE}api/calls")
+                    .addHeader("Authorization", "Bearer $token")
+                    .get()
+                    .build()
+                val response = client.newCall(request).execute()
+                val responseBody = response.body?.string() ?: ""
+                val json = JSONObject(responseBody)
+                if (json.optString("status") == "success") {
+                    val arr = json.getJSONArray("data")
+                    val records = mutableListOf<CallRecord>()
+                    for (i in 0 until arr.length()) {
+                        val item = arr.getJSONObject(i)
+                        records.add(
+                            CallRecord(
+                                id = item.getString("id"),
+                                prankName = item.optString("prank_name", "Unknown"),
+                                callTo = item.optString("call_to", ""),
+                                status = item.optString("status", "unknown"),
+                                createdAt = item.optString("created_at", "")
+                            )
+                        )
+                    }
+                    Result.success(records)
+                } else {
+                    Result.failure(Exception("Failed to load call history"))
                 }
             } catch (e: Exception) {
                 Result.failure(e)
@@ -199,63 +289,21 @@ class PrankCallerApi @Inject constructor(
         }
     }
 
-    suspend fun getCallStatus(sidToken: String): Result<String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val token = getToken() ?: return@withContext Result.failure(Exception("Not logged in"))
-                val body = FormBody.Builder()
-                    .add("sidToken", sidToken)
-                    .build()
-                val request = Request.Builder()
-                    .url("${STATUS_BASE}status")
-                    .addHeader("Authorization", "Bearer $token")
-                    .addHeader("Content-Type", "application/json")
-                    .post(body)
-                    .build()
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string() ?: ""
-                val json = JSONObject(responseBody)
-                Result.success(json.optString("callStatus", "unknown"))
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-    }
-
-    suspend fun endCall(sidToken: String): Result<Unit> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val token = getToken() ?: return@withContext Result.failure(Exception("Not logged in"))
-                val body = FormBody.Builder()
-                    .add("sidToken", sidToken)
-                    .build()
-                val request = Request.Builder()
-                    .url("${STATUS_BASE}end-call")
-                    .addHeader("Authorization", "Bearer $token")
-                    .addHeader("Content-Type", "application/json")
-                    .post(body)
-                    .build()
-                client.newCall(request).execute().close()
-                Result.success(Unit)
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-    }
-
     companion object {
-        private const val API_BASE = "https://apiv4.prankcaller.io/"
-        private const val STATUS_BASE = "https://aibot.prankcaller.io/"
-        private const val TOKEN_BASE = "https://securetoken.googleapis.com"
-        private const val FIREBASE_API_KEY = "AIzaSyCavu7eOOpfQeXXEPCmSAePSzE877B182E"
-        private const val REFERER = "https://prankcaller.io/"
-        private const val ORIGIN = "https://prankcaller.io"
-        private const val KEY_ID_TOKEN = "id_token"
-        private const val KEY_REFRESH_TOKEN = "refresh_token"
+        // TODO: Update this to your deployed backend URL
+        private const val API_BASE = "https://prankcaller-backend.onrender.com/"
+        private const val KEY_TOKEN = "auth_token"
         private const val KEY_EMAIL = "email"
         private const val KEY_USER_ID = "user_id"
     }
 }
+
+data class AuthResponse(
+    val token: String,
+    val userId: String,
+    val email: String,
+    val credits: Int
+)
 
 data class UserDetail(
     val minutes: Int,
@@ -265,6 +313,15 @@ data class UserDetail(
 
 data class CallResponse(
     val success: Boolean,
-    val sidToken: String,
-    val error: String?
+    val callId: String,
+    val message: String?,
+    val creditsRemaining: Int
+)
+
+data class CallRecord(
+    val id: String,
+    val prankName: String,
+    val callTo: String,
+    val status: String,
+    val createdAt: String
 )

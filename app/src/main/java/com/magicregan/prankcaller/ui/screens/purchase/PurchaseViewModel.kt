@@ -1,8 +1,6 @@
 package com.magicregan.prankcaller.ui.screens.purchase
 
 import android.content.Context
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -36,17 +34,24 @@ class PurchaseViewModel @Inject constructor(
 
         _isPurchasing.value = true
 
-        // Open prankcaller.io purchase page in browser
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(PURCHASE_URL))
-        context.startActivity(intent)
-
-        _isPurchasing.value = false
-
-        Toast.makeText(
-            context,
-            "Complete purchase in browser, then credits will sync automatically",
-            Toast.LENGTH_LONG
-        ).show()
+        viewModelScope.launch {
+            val result = api.addCredits(creditPackage.credits)
+            result.onSuccess { newTotal ->
+                repository.setCredits(newTotal)
+                Toast.makeText(
+                    context,
+                    "${creditPackage.credits} credits added! Total: $newTotal",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }.onFailure { e ->
+                Toast.makeText(
+                    context,
+                    "Failed: ${e.message}",
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+            _isPurchasing.value = false
+        }
     }
 
     fun syncCreditsFromApi() {
@@ -55,7 +60,7 @@ class PurchaseViewModel @Inject constructor(
             val result = api.getUserDetail()
             result.onSuccess { detail ->
                 val apiCredits = detail.minutes + detail.freeCalls
-                if (apiCredits > 0) {
+                if (apiCredits >= 0) {
                     repository.setCredits(apiCredits)
                 }
             }
@@ -63,10 +68,17 @@ class PurchaseViewModel @Inject constructor(
     }
 
     fun addFreeCredits() {
-        repository.addCredits(5)
-    }
-
-    companion object {
-        private const val PURCHASE_URL = "https://prankcaller.io/get-tokens"
+        if (!api.isLoggedIn) {
+            repository.addCredits(5)
+            return
+        }
+        viewModelScope.launch {
+            val result = api.addCredits(5)
+            result.onSuccess { newTotal ->
+                repository.setCredits(newTotal)
+            }.onFailure {
+                repository.addCredits(5)
+            }
+        }
     }
 }

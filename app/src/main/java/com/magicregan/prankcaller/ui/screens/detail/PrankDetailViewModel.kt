@@ -90,13 +90,13 @@ class PrankDetailViewModel @Inject constructor(
             val result = api.startCall(
                 prankId = currentPrank.id,
                 callTo = fullNumber,
-                callFrom = fullNumber,
+                countryCode = _countryCode.value,
                 recordCall = false
             )
 
             result.fold(
                 onSuccess = { response ->
-                    _callState.value = CallState.Success(response.sidToken)
+                    _callState.value = CallState.Success(response.callId)
 
                     // Start background service for audio monitoring
                     PrankCallService.start(
@@ -128,7 +128,7 @@ class PrankDetailViewModel @Inject constructor(
         data object Idle : CallState()
         data object Calling : CallState()
         data object NeedLogin : CallState()
-        data class Success(val sidToken: String) : CallState()
+        data class Success(val callId: String) : CallState()
         data class Error(val message: String) : CallState()
     }
 }
