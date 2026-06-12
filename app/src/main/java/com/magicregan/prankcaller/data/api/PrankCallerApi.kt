@@ -290,8 +290,7 @@ class PrankCallerApi @Inject constructor(
     }
 
     companion object {
-        // TODO: Update this to your deployed backend URL
-        private const val API_BASE = "https://prankcaller-backend.onrender.com/"
+        private const val API_BASE = "https://prankcaller-android.onrender.com/"
         private const val KEY_TOKEN = "auth_token"
         private const val KEY_EMAIL = "email"
         private const val KEY_USER_ID = "user_id"
