@@ -1,72 +1,56 @@
 package com.magicregan.prankcaller.ui.screens.login
 
-import android.widget.Toast
+import android.annotation.SuppressLint
+import android.graphics.Bitmap
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.JavascriptInterface
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.magicregan.prankcaller.ui.theme.CardBackground
 import com.magicregan.prankcaller.ui.theme.Crimson
 import com.magicregan.prankcaller.ui.theme.CrimsonDark
 import com.magicregan.prankcaller.ui.theme.DarkBackground
 import com.magicregan.prankcaller.ui.theme.TextPrimary
-import com.magicregan.prankcaller.ui.theme.TextSecondary
 
+@SuppressLint("SetJavaScriptEnabled")
 @Composable
 fun LoginScreen(
     onLoginSuccess: () -> Unit,
+    onBack: () -> Unit = {},
     viewModel: LoginViewModel = hiltViewModel()
 ) {
-    val isLoading by viewModel.isLoading.collectAsState()
-    val context = LocalContext.current
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var isRegistering by remember { mutableStateOf(true) }
-
-    val textFieldColors = OutlinedTextFieldDefaults.colors(
-        focusedTextColor = TextPrimary,
-        unfocusedTextColor = TextPrimary,
-        focusedBorderColor = Crimson,
-        unfocusedBorderColor = TextSecondary.copy(alpha = 0.3f),
-        focusedLabelColor = Crimson,
-        unfocusedLabelColor = TextSecondary,
-        cursorColor = Crimson
-    )
+    var isLoading by remember { mutableStateOf(true) }
 
     Column(
         modifier = Modifier
@@ -78,146 +62,212 @@ fun LoginScreen(
                 .fillMaxWidth()
                 .background(CrimsonDark)
                 .windowInsetsPadding(WindowInsets.statusBars)
-                .padding(horizontal = 12.dp, vertical = 16.dp),
-            contentAlignment = Alignment.Center
+                .padding(horizontal = 4.dp, vertical = 8.dp)
         ) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = TextPrimary,
+                    modifier = Modifier.size(28.dp)
+                )
+            }
             Text(
-                text = "Prank Caller",
+                text = "Sign In",
                 style = MaterialTheme.typography.headlineMedium,
                 color = TextPrimary,
                 fontWeight = FontWeight.Bold,
-                fontSize = 24.sp
+                fontSize = 22.sp,
+                modifier = Modifier.align(Alignment.Center)
             )
         }
 
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(24.dp)
+                .background(DarkBackground)
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { context ->
+                    WebView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        settings.javaScriptEnabled = true
+                        settings.domStorageEnabled = true
+                        settings.databaseEnabled = true
+                        settings.setSupportMultipleWindows(false)
 
-            Text(
-                text = if (isRegistering) "Create Account" else "Log In",
-                style = MaterialTheme.typography.headlineLarge,
-                color = TextPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 28.sp
-            )
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
 
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = if (isRegistering) "Create a free account to start making prank calls"
-                else "Sign in to your Prank Caller account",
-                style = MaterialTheme.typography.bodyMedium,
-                color = TextSecondary,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(modifier = Modifier.height(32.dp))
-
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("Email") },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Email,
-                    imeAction = ImeAction.Next
-                ),
-                colors = textFieldColors,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            OutlinedTextField(
-                value = password,
-                onValueChange = { password = it },
-                label = { Text("Password") },
-                singleLine = true,
-                visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Password,
-                    imeAction = ImeAction.Done
-                ),
-                colors = textFieldColors,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(modifier = Modifier.height(24.dp))
-
-            Button(
-                onClick = {
-                    if (email.isBlank() || password.isBlank()) {
-                        Toast.makeText(context, "Please enter email and password", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    if (isRegistering) {
-                        viewModel.register(email, password) { success, error ->
-                            if (success) {
+                        addJavascriptInterface(
+                            TokenBridge { idToken, refreshToken, email, uid ->
+                                viewModel.onTokenReceived(idToken, refreshToken, email, uid)
                                 onLoginSuccess()
-                            } else {
-                                Toast.makeText(context, error ?: "Registration failed", Toast.LENGTH_SHORT).show()
+                            },
+                            "AndroidBridge"
+                        )
+
+                        webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+                                super.onPageStarted(view, url, favicon)
+                                isLoading = true
+                            }
+
+                            override fun onPageFinished(view: WebView?, url: String?) {
+                                super.onPageFinished(view, url)
+                                isLoading = false
+                                injectTokenExtractor(view)
+                            }
+
+                            override fun shouldOverrideUrlLoading(
+                                view: WebView?,
+                                request: WebResourceRequest?
+                            ): Boolean {
+                                val url = request?.url?.toString() ?: return false
+                                if (url.startsWith("https://prankcaller.io") ||
+                                    url.startsWith("https://accounts.google.com") ||
+                                    url.contains("googleapis.com") ||
+                                    url.contains("firebaseapp.com") ||
+                                    url.contains("gstatic.com") ||
+                                    url.contains("google.com")
+                                ) {
+                                    return false
+                                }
+                                return false
                             }
                         }
-                    } else {
-                        viewModel.login(email, password) { success, error ->
-                            if (success) {
-                                onLoginSuccess()
-                            } else {
-                                Toast.makeText(context, error ?: "Login failed", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+
+                        webChromeClient = WebChromeClient()
+
+                        loadUrl("https://prankcaller.io/")
                     }
-                },
-                enabled = !isLoading,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = Crimson,
-                    contentColor = TextPrimary
+                }
+            )
+
+            if (isLoading) {
+                CircularProgressIndicator(
+                    color = Crimson,
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .size(48.dp)
                 )
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(
-                        color = TextPrimary,
-                        modifier = Modifier.size(24.dp),
-                        strokeWidth = 2.dp
-                    )
-                } else {
-                    Text(
-                        text = if (isRegistering) "Create Account" else "Log In",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp
-                    )
+            }
+        }
+    }
+}
+
+private fun injectTokenExtractor(webView: WebView?) {
+    webView?.evaluateJavascript(
+        """
+        (function() {
+            // Check if we already set up the listener
+            if (window._prankTokenListenerSet) return;
+            window._prankTokenListenerSet = true;
+            
+            // Poll for Firebase auth state
+            function checkAuth() {
+                try {
+                    // Try to access Firebase auth
+                    if (typeof firebase !== 'undefined' && firebase.auth) {
+                        var user = firebase.auth().currentUser;
+                        if (user) {
+                            user.getIdToken().then(function(idToken) {
+                                // Get the refresh token from the internal state
+                                var refreshToken = user.refreshToken || '';
+                                var email = user.email || '';
+                                var uid = user.uid || '';
+                                if (idToken && typeof AndroidBridge !== 'undefined') {
+                                    AndroidBridge.onToken(idToken, refreshToken, email, uid);
+                                }
+                            });
+                            return;
+                        }
+                        
+                        // Set up auth state listener
+                        firebase.auth().onAuthStateChanged(function(user) {
+                            if (user) {
+                                user.getIdToken().then(function(idToken) {
+                                    var refreshToken = user.refreshToken || '';
+                                    var email = user.email || '';
+                                    var uid = user.uid || '';
+                                    if (typeof AndroidBridge !== 'undefined') {
+                                        AndroidBridge.onToken(idToken, refreshToken, email, uid);
+                                    }
+                                });
+                            }
+                        });
+                    } else {
+                        // Firebase not loaded yet, retry
+                        setTimeout(checkAuth, 1000);
+                    }
+                } catch(e) {
+                    setTimeout(checkAuth, 1000);
                 }
             }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            TextButton(onClick = { isRegistering = !isRegistering }) {
-                Text(
-                    text = if (isRegistering) "Already have an account? Log In"
-                    else "Don't have an account? Sign Up",
-                    color = Crimson
-                )
+            
+            // Also check IndexedDB for stored tokens
+            function checkStoredToken() {
+                try {
+                    var request = indexedDB.open('firebaseLocalStorageDb');
+                    request.onsuccess = function(event) {
+                        var db = event.target.result;
+                        if (!db.objectStoreNames.contains('firebaseLocalStorage')) {
+                            setTimeout(checkStoredToken, 2000);
+                            return;
+                        }
+                        var tx = db.transaction('firebaseLocalStorage', 'readonly');
+                        var store = tx.objectStore('firebaseLocalStorage');
+                        var getAllReq = store.getAll();
+                        getAllReq.onsuccess = function() {
+                            var results = getAllReq.result;
+                            for (var i = 0; i < results.length; i++) {
+                                var item = results[i];
+                                if (item && item.value && item.value.stsTokenManager) {
+                                    var token = item.value.stsTokenManager.accessToken;
+                                    var refresh = item.value.stsTokenManager.refreshToken || '';
+                                    var email = item.value.email || '';
+                                    var uid = item.value.uid || '';
+                                    if (token && typeof AndroidBridge !== 'undefined') {
+                                        AndroidBridge.onToken(token, refresh, email, uid);
+                                        return;
+                                    }
+                                }
+                            }
+                            setTimeout(checkStoredToken, 2000);
+                        };
+                    };
+                    request.onerror = function() {
+                        setTimeout(checkStoredToken, 2000);
+                    };
+                } catch(e) {
+                    setTimeout(checkStoredToken, 2000);
+                }
             }
+            
+            checkAuth();
+            checkStoredToken();
+        })();
+        """.trimIndent(),
+        null
+    )
+}
 
-            Spacer(modifier = Modifier.height(24.dp))
+class TokenBridge(
+    private val onToken: (idToken: String, refreshToken: String, email: String, uid: String) -> Unit
+) {
+    private var tokenSent = false
 
-            Text(
-                text = "Your account includes free credits to get started.\nMake prank calls to any number worldwide.",
-                style = MaterialTheme.typography.bodySmall,
-                color = TextSecondary.copy(alpha = 0.6f),
-                textAlign = TextAlign.Center
-            )
+    @JavascriptInterface
+    fun onToken(idToken: String, refreshToken: String, email: String, uid: String) {
+        if (!tokenSent && idToken.isNotEmpty()) {
+            tokenSent = true
+            onToken.invoke(idToken, refreshToken, email, uid)
         }
     }
 }

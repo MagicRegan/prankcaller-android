@@ -45,7 +45,7 @@ class PrankCallerApi @Inject constructor(
         set(value) { prefs.edit().putString(KEY_USER_ID, value).apply() }
 
     val isLoggedIn: Boolean
-        get() = cachedIdToken != null && cachedRefreshToken != null
+        get() = cachedIdToken != null
 
     val userEmail: String?
         get() = cachedEmail
@@ -53,94 +53,11 @@ class PrankCallerApi @Inject constructor(
     val userId: String?
         get() = cachedUserId
 
-    suspend fun login(email: String, password: String): Result<String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val json = JSONObject().apply {
-                    put("email", email)
-                    put("password", password)
-                    put("returnSecureToken", true)
-                }
-                val body = json.toString()
-                    .toRequestBody("application/json".toMediaType())
-
-                val request = Request.Builder()
-                    .url("$IDENTITY_BASE/v1/accounts:signInWithPassword?key=$FIREBASE_API_KEY")
-                    .addHeader("Referer", "https://prankcaller.io/")
-                    .post(body)
-                    .build()
-
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string() ?: ""
-                val responseJson = JSONObject(responseBody)
-
-                if (responseJson.has("idToken")) {
-                    val idToken = responseJson.getString("idToken")
-                    val refreshToken = responseJson.getString("refreshToken")
-                    val localId = responseJson.getString("localId")
-                    val userEmail = responseJson.getString("email")
-
-                    cachedIdToken = idToken
-                    cachedRefreshToken = refreshToken
-                    cachedUserId = localId
-                    cachedEmail = userEmail
-
-                    loginToApi(idToken)
-                    Result.success(idToken)
-                } else {
-                    val error = responseJson.optJSONObject("error")
-                    val message = error?.optString("message", "Login failed") ?: "Login failed"
-                    Result.failure(Exception(formatAuthError(message)))
-                }
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
-    }
-
-    suspend fun register(email: String, password: String): Result<String> {
-        return withContext(Dispatchers.IO) {
-            try {
-                val json = JSONObject().apply {
-                    put("email", email)
-                    put("password", password)
-                    put("returnSecureToken", true)
-                }
-                val body = json.toString()
-                    .toRequestBody("application/json".toMediaType())
-
-                val request = Request.Builder()
-                    .url("$IDENTITY_BASE/v1/accounts:signUp?key=$FIREBASE_API_KEY")
-                    .addHeader("Referer", "https://prankcaller.io/")
-                    .post(body)
-                    .build()
-
-                val response = client.newCall(request).execute()
-                val responseBody = response.body?.string() ?: ""
-                val responseJson = JSONObject(responseBody)
-
-                if (responseJson.has("idToken")) {
-                    val idToken = responseJson.getString("idToken")
-                    val refreshToken = responseJson.getString("refreshToken")
-                    val localId = responseJson.getString("localId")
-                    val userEmail = responseJson.getString("email")
-
-                    cachedIdToken = idToken
-                    cachedRefreshToken = refreshToken
-                    cachedUserId = localId
-                    cachedEmail = userEmail
-
-                    loginToApi(idToken)
-                    Result.success(idToken)
-                } else {
-                    val error = responseJson.optJSONObject("error")
-                    val message = error?.optString("message", "Registration failed") ?: "Registration failed"
-                    Result.failure(Exception(formatAuthError(message)))
-                }
-            } catch (e: Exception) {
-                Result.failure(e)
-            }
-        }
+    fun saveAuthTokens(idToken: String, refreshToken: String, email: String, uid: String) {
+        cachedIdToken = idToken
+        cachedRefreshToken = refreshToken
+        cachedEmail = email
+        cachedUserId = uid
     }
 
     fun logout() {
@@ -155,16 +72,13 @@ class PrankCallerApi @Inject constructor(
         return withContext(Dispatchers.IO) {
             try {
                 val refresh = cachedRefreshToken ?: return@withContext null
-                val json = JSONObject().apply {
-                    put("grant_type", "refresh_token")
-                    put("refresh_token", refresh)
-                }
-                val body = json.toString()
-                    .toRequestBody("application/json".toMediaType())
+                val body = "grant_type=refresh_token&refresh_token=$refresh"
+                    .toRequestBody("application/x-www-form-urlencoded".toMediaType())
 
                 val request = Request.Builder()
                     .url("$TOKEN_BASE/v1/token?key=$FIREBASE_API_KEY")
-                    .addHeader("Referer", "https://prankcaller.io/")
+                    .addHeader("Referer", REFERER)
+                    .addHeader("Origin", ORIGIN)
                     .post(body)
                     .build()
 
@@ -188,14 +102,13 @@ class PrankCallerApi @Inject constructor(
     }
 
     private suspend fun getToken(): String? {
-        val token = cachedIdToken
-        if (token != null) return token
-        return refreshIdToken()
+        return cachedIdToken ?: refreshIdToken()
     }
 
-    private suspend fun loginToApi(token: String) {
+    suspend fun loginToApi() {
         withContext(Dispatchers.IO) {
             try {
+                val token = getToken() ?: return@withContext
                 val body = FormBody.Builder()
                     .add("source", "Android")
                     .build()
@@ -330,24 +243,13 @@ class PrankCallerApi @Inject constructor(
         }
     }
 
-    private fun formatAuthError(errorCode: String): String {
-        return when {
-            errorCode.contains("EMAIL_NOT_FOUND") -> "No account found with this email"
-            errorCode.contains("INVALID_PASSWORD") || errorCode.contains("INVALID_LOGIN_CREDENTIALS") -> "Incorrect password"
-            errorCode.contains("EMAIL_EXISTS") -> "An account already exists with this email"
-            errorCode.contains("WEAK_PASSWORD") -> "Password must be at least 6 characters"
-            errorCode.contains("INVALID_EMAIL") -> "Please enter a valid email address"
-            errorCode.contains("TOO_MANY_ATTEMPTS") -> "Too many attempts. Please try again later"
-            else -> errorCode
-        }
-    }
-
     companion object {
         private const val API_BASE = "https://apiv4.prankcaller.io/"
         private const val STATUS_BASE = "https://aibot.prankcaller.io/"
-        private const val IDENTITY_BASE = "https://identitytoolkit.googleapis.com"
         private const val TOKEN_BASE = "https://securetoken.googleapis.com"
         private const val FIREBASE_API_KEY = "AIzaSyCavu7eOOpfQeXXEPCmSAePSzE877B182E"
+        private const val REFERER = "https://prankcaller.io/"
+        private const val ORIGIN = "https://prankcaller.io"
         private const val KEY_ID_TOKEN = "id_token"
         private const val KEY_REFRESH_TOKEN = "refresh_token"
         private const val KEY_EMAIL = "email"

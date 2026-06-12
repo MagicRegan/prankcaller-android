@@ -66,6 +66,9 @@ fun NavGraph(
             LoginScreen(
                 onLoginSuccess = {
                     navController.popBackStack()
+                },
+                onBack = {
+                    navController.popBackStack()
                 }
             )
         }
